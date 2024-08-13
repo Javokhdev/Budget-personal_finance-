@@ -1,0 +1,3 @@
+[submodule "submodule-personal_finance"]
+	path = submodule-personal_finance
+	url = git@github.com:Javokhdev/submodule-personal_finance.git
