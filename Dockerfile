@@ -1,15 +1,34 @@
-FROM golang:1.22.5 AS builder
-WORKDIR /app
-COPY go.mod ./
-COPY go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o myapp ./server/server.go
+# Stage 1: Build stage
+FROM golang:1.22.1 AS builder
 
-FROM alpine:latest
 WORKDIR /app
+
+# Copy and download dependencies
+COPY go.mod .
+COPY go.sum .
+RUN go mod download
+
+# Copy the rest of the application
+COPY . .
+
+
+
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o myapp .
+
+# Stage 2: Final stage
+FROM alpine:latest
+
+WORKDIR /app
+
+# Install certificates to handle secure connections
+RUN apk add --no-cache ca-certificates
+
+# Copy the compiled binary from the builder stage
 COPY --from=builder /app/myapp .
 
-COPY .env .
-EXPOSE 8070
+# Expose the application port
+EXPOSE 8087
+
+# Command to run the executable
 CMD ["./myapp"]

@@ -17,15 +17,13 @@ type MongoStorage struct {
 	Categorys u.CategoryStorage
 	Goals u.GoalStorage
 	Transactions u.TransactionStorage
+	Notifications u.NotificationService
 }
 
-func NewMongoConnection() (u.InitRoot, error) {
-	uri := fmt.Sprintf("mongodb://%s:%d",
-    "mongo",
-    27017,
-  )
-	clientOptions := options.Client().ApplyURI(uri).
-	SetAuth(options.Credential{Username: "javohir", Password: "root"})
+func NewMongoConnection() (*MongoStorage, error) {
+	uri := fmt.Sprintf("mongodb://%s:%d", "localhost", 27017)
+
+	clientOptions := options.Client().ApplyURI(uri)
 
 	client, err := mongo.Connect(context.Background(), clientOptions)
 	if err != nil {
@@ -39,10 +37,11 @@ func NewMongoConnection() (u.InitRoot, error) {
 
 	fmt.Println("Connected to MongoDB!")
 
-	db := client.Database("bugdet")
+	db := client.Database("budget")
 
 	return &MongoStorage{Db: db}, err
 }
+
 
 func (s *MongoStorage) Account() u.AccountStorage {
 	if s.Accounts == nil {
@@ -77,4 +76,11 @@ func (s *MongoStorage) Transaction() u.TransactionStorage {
 		s.Transactions = &TransactionStorage{s.Db}
 	}
 	return s.Transactions
+}
+
+func (s *MongoStorage) Notification() u.NotificationService {
+	if s.Notifications == nil {
+		s.Notifications = &NotificationService{s.Db}
+	}
+	return s.Notifications
 }

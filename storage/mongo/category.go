@@ -4,44 +4,53 @@ import (
 	"context"
 	"log"
 
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	pb "budget-service/genproto"
 )
 
-// CategoryStorage struct to handle category operations in MongoDB
 type CategoryStorage struct {
 	db *mongo.Database
 }
 
-// NewCategoryStorage initializes a new CategoryStorage
 func NewCategoryStorage(db *mongo.Database) *CategoryStorage {
 	return &CategoryStorage{db: db}
 }
 
-// CreateCategory creates a new category in the database
 func (s *CategoryStorage) CreateCategory(req *pb.CreateCategoryRequest) (*pb.MessageResponse, error) {
 	coll := s.db.Collection("categories")
+	id := uuid.NewString()
 
-	_, err := coll.InsertOne(context.Background(), bson.D{
-		{Key: "id", Value: req.Id},
-		{Key: "user_id", Value: req.UserId},
-		{Key: "name", Value: req.Name},
-		{Key: "type", Value: req.Type},
+	_, err := coll.InsertOne(context.Background(), bson.M{
+		"id":     id,
+		"user_id": req.UserId,
+		"name":   req.Name,
+		"type":   req.Type,
 	})
 	if err != nil {
 		log.Printf("Failed to create category: %v", err)
-		return nil, err
+		return &pb.MessageResponse{Message: "Failed to create category"}, err
 	}
 
 	return &pb.MessageResponse{Message: "Category created successfully"}, nil
 }
 
-// ListCategories lists all categories
 func (s *CategoryStorage) ListCategories(req *pb.ListCategoriesRequest) (*pb.ListResponse, error) {
 	coll := s.db.Collection("categories")
 
-	cursor, err := coll.Find(context.Background(), bson.D{})
+	filter := bson.M{}
+	if req.UserId != "" {
+		filter["user_id"] = req.UserId
+	}
+	if req.Name != "" {
+		filter["name"] = req.Name
+	}
+	if req.Type != "" {
+		filter["type"] = req.Type
+	}
+
+	cursor, err := coll.Find(context.Background(), filter)
 	if err != nil {
 		log.Printf("Failed to list categories: %v", err)
 		return nil, err
@@ -66,13 +75,11 @@ func (s *CategoryStorage) ListCategories(req *pb.ListCategoriesRequest) (*pb.Lis
 	return &pb.ListResponse{Categories: categories}, nil
 }
 
-// GetCategoryById retrieves a category by its ID
 func (s *CategoryStorage) GetCategoryById(req *pb.GetCategoryByIdRequest) (*pb.CategoryResponse, error) {
 	coll := s.db.Collection("categories")
 
-	filter := bson.D{{Key: "id", Value: req.CategoryId}}
 	var category pb.CategoryResponse
-	err := coll.FindOne(context.Background(), filter).Decode(&category)
+	err := coll.FindOne(context.Background(), bson.M{"id": req.CategoryId}).Decode(&category)
 	if err != nil {
 		log.Printf("Failed to get category by id: %v", err)
 		return nil, err
@@ -81,37 +88,37 @@ func (s *CategoryStorage) GetCategoryById(req *pb.GetCategoryByIdRequest) (*pb.C
 	return &category, nil
 }
 
-// UpdateCategory updates a category based on the provided request data
 func (s *CategoryStorage) UpdateCategory(req *pb.UpdateCategoryRequest) (*pb.MessageResponse, error) {
 	coll := s.db.Collection("categories")
 
-	filter := bson.D{{Key: "id", Value: req.CategoryId}}
-	update := bson.D{
-		{Key: "$set", Value: bson.D{
-			{Key: "user_id", Value: req.UserId},
-			{Key: "name", Value: req.Name},
-			{Key: "type", Value: req.Type},
-		}},
+	update := bson.M{}
+	if req.Name != "" {
+		update["name"] = req.Name
+	}
+	if req.Type != "" {
+		update["type"] = req.Type
 	}
 
-	_, err := coll.UpdateOne(context.Background(), filter, update)
+	if len(update) == 0 {
+		return &pb.MessageResponse{Message: "Nothing to update"}, nil
+	}
+
+	_, err := coll.UpdateOne(context.Background(), bson.M{"id": req.CategoryId}, bson.M{"$set": update})
 	if err != nil {
 		log.Printf("Failed to update category: %v", err)
-		return nil, err
+		return &pb.MessageResponse{Message: "Failed to update category"}, err
 	}
 
 	return &pb.MessageResponse{Message: "Category updated successfully"}, nil
 }
 
-// DeleteCategory deletes a category by its ID
 func (s *CategoryStorage) DeleteCategory(req *pb.DeleteCategoryRequest) (*pb.CategoryDeleteResponse, error) {
 	coll := s.db.Collection("categories")
 
-	filter := bson.D{{Key: "id", Value: req.CategoryId}}
-	_, err := coll.DeleteOne(context.Background(), filter)
+	_, err := coll.DeleteOne(context.Background(), bson.M{"id": req.CategoryId})
 	if err != nil {
 		log.Printf("Failed to delete category: %v", err)
-		return nil, err
+		return &pb.CategoryDeleteResponse{Success: false}, err
 	}
 
 	return &pb.CategoryDeleteResponse{Success: true}, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	pb "budget-service/genproto"
@@ -23,29 +24,50 @@ func NewTransactionStorage(db *mongo.Database) *TransactionStorage {
 func (s *TransactionStorage) CreateTransaction(req *pb.CreateTransactionRequest) (*pb.Response, error) {
 	coll := s.db.Collection("transactions")
 
-	_, err := coll.InsertOne(context.Background(), bson.D{
-		{Key: "id", Value: req.Id},
-		{Key: "user_id", Value: req.UserId},
-		{Key: "account_id", Value: req.AccountId},
-		{Key: "category_id", Value: req.CategoryId},
-		{Key: "amount", Value: req.Amount},
-		{Key: "type", Value: req.Type},
-		{Key: "description", Value: req.Description},
-		{Key: "date", Value: req.Date},
+	id := uuid.NewString() // Generate a new UUID for the transaction
+	_, err := coll.InsertOne(context.Background(), bson.M{
+		"id":          id,
+		"user_id":     req.UserId,
+		"account_id":  req.AccountId,
+		"category_id": req.CategoryId,
+		"amount":      req.Amount,
+		"type":        req.Type,
+		"description": req.Description,
+		"date":        req.Date,
 	})
 	if err != nil {
 		log.Printf("Failed to create transaction: %v", err)
-		return nil, err
+		return &pb.Response{Message: "Failed to create transaction"}, err
 	}
 
 	return &pb.Response{Message: "Transaction created successfully"}, nil
 }
 
-// GetTransactions retrieves all transactions
+// GetTransactions retrieves all transactions based on the filter criteria
 func (s *TransactionStorage) GetTransactions(req *pb.GetTransactionsRequest) (*pb.TransactionsResponse, error) {
 	coll := s.db.Collection("transactions")
 
-	cursor, err := coll.Find(context.Background(), bson.D{})
+	filter := bson.M{}
+	if req.AccountId != "" {
+		filter["account_id"] = req.AccountId
+	}
+	if req.CategoryId != "" {
+		filter["category_id"] = req.CategoryId
+	}
+	if req.Amount > 0 {
+		filter["amount"] = req.Amount
+	}
+	if req.Type != "" {
+		filter["type"] = req.Type
+	}
+	if req.Description != "" {
+		filter["description"] = req.Description
+	}
+	if req.Date != "" {
+		filter["date"] = req.Date
+	}
+
+	cursor, err := coll.Find(context.Background(), filter)
 	if err != nil {
 		log.Printf("Failed to list transactions: %v", err)
 		return nil, err
@@ -74,10 +96,13 @@ func (s *TransactionStorage) GetTransactions(req *pb.GetTransactionsRequest) (*p
 func (s *TransactionStorage) GetTransactionById(req *pb.GetTransactionByIdRequest) (*pb.TransactionResponse, error) {
 	coll := s.db.Collection("transactions")
 
-	filter := bson.D{{Key: "transaction_id", Value: req.TransactionId}}
 	var transaction pb.TransactionResponse
-	err := coll.FindOne(context.Background(), filter).Decode(&transaction)
+	err := coll.FindOne(context.Background(), bson.M{"id": req.TransactionId}).Decode(&transaction)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			log.Printf("No transaction found with id: %v", req.TransactionId)
+			return nil, err
+		}
 		log.Printf("Failed to get transaction by id: %v", err)
 		return nil, err
 	}
@@ -89,23 +114,34 @@ func (s *TransactionStorage) GetTransactionById(req *pb.GetTransactionByIdReques
 func (s *TransactionStorage) UpdateTransaction(req *pb.UpdateTransactionRequest) (*pb.Response, error) {
 	coll := s.db.Collection("transactions")
 
-	filter := bson.D{{Key: "transaction_id", Value: req.TransactionId}}
-	update := bson.D{
-		{Key: "$set", Value: bson.D{
-			{Key: "user_id", Value: req.UserId},
-			{Key: "account_id", Value: req.AccountId},
-			{Key: "category_id", Value: req.CategoryId},
-			{Key: "amount", Value: req.Amount},
-			{Key: "type", Value: req.Type},
-			{Key: "description", Value: req.Description},
-			{Key: "date", Value: req.Date},
-		}},
+	update := bson.M{}
+	if req.AccountId != "" {
+		update["account_id"] = req.AccountId
+	}
+	if req.CategoryId != "" {
+		update["category_id"] = req.CategoryId
+	}
+	if req.Amount > 0 {
+		update["amount"] = req.Amount
+	}
+	if req.Type != "" {
+		update["type"] = req.Type
+	}
+	if req.Description != "" {
+		update["description"] = req.Description
+	}
+	if req.Date != "" {
+		update["date"] = req.Date
 	}
 
-	_, err := coll.UpdateOne(context.Background(), filter, update)
+	if len(update) == 0 {
+		return &pb.Response{Message: "Nothing to update"}, nil
+	}
+
+	_, err := coll.UpdateOne(context.Background(), bson.M{"id": req.TransactionId}, bson.M{"$set": update})
 	if err != nil {
 		log.Printf("Failed to update transaction: %v", err)
-		return nil, err
+		return &pb.Response{Message: "Failed to update transaction"}, err
 	}
 
 	return &pb.Response{Message: "Transaction updated successfully"}, nil
@@ -115,11 +151,10 @@ func (s *TransactionStorage) UpdateTransaction(req *pb.UpdateTransactionRequest)
 func (s *TransactionStorage) DeleteTransaction(req *pb.DeleteTransactionRequest) (*pb.TransactionDeleteResponse, error) {
 	coll := s.db.Collection("transactions")
 
-	filter := bson.D{{Key: "transaction_id", Value: req.TransactionId}}
-	_, err := coll.DeleteOne(context.Background(), filter)
+	_, err := coll.DeleteOne(context.Background(), bson.M{"id": req.TransactionId})
 	if err != nil {
 		log.Printf("Failed to delete transaction: %v", err)
-		return nil, err
+		return &pb.TransactionDeleteResponse{Success: false}, err
 	}
 
 	return &pb.TransactionDeleteResponse{Success: true}, nil

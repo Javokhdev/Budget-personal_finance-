@@ -1,39 +1,6 @@
-
-version: '3.8'
+version: '3.9'
 
 services:
-  competition_service:
-    container_name: competition_service
-    build: .
-    ports:
-      - "8070:8070"
-    networks:
-      - mynetwork
-    depends_on:
-      - postgres-db
-      - kafka
-
-  
-  postgres-db:
-    container_name: db
-    image: postgres:latest
-    environment:
-      PGUSER: postgres
-      POSTGRES_PASSWORD: feruza1727
-      POSTGRES_DB: olympy
-    volumes:
-      - db:/post-database/post-memory
-    ports:
-      - "5433:5432"
-    networks:
-      - mynetwork
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d postgres"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-
   zookeeper:
     image: wurstmeister/zookeeper
     ports:
@@ -50,22 +17,24 @@ services:
       - "9092:9092"
     depends_on:
       - zookeeper
-      - postgres-db
     environment:
       KAFKA_ADVERTISED_HOST_NAME: kafka
       KAFKA_ADVERTISED_PORT: 9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
     networks:
       - mynetwork
-
+      
+  game-service:
+    container_name: gameservice
+    build: .
+    ports:
+      - "8087:8087"
+    networks:
+      - mynetwork
 
 networks:
   mynetwork:
     external: true
-    name: mynetwork
+    name: global-network
     driver: bridge
 
-
-volumes:
-  db:
-    driver: local

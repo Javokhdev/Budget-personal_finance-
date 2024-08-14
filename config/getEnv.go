@@ -35,13 +35,13 @@ func Load() Config {
 
   config.HTTPPort = cast.ToString(GetOrReturnDefaultValue("HTTP_PORT", ":8070"))
 
-  config.DB_HOST = cast.ToString(GetOrReturnDefaultValue("DB_HOST", "database-1.c7cqkqsa66fu.us-east-2.rds.amazonaws.com"))
+  config.DB_HOST = cast.ToString(GetOrReturnDefaultValue("DB_HOST", "localhost"))
   config.DB_PORT = cast.ToInt(GetOrReturnDefaultValue("DB_PORT", 5432))
   config.DB_USER = cast.ToString(GetOrReturnDefaultValue("DB_USER", "postgres"))
-  config.DB_PASSWORD = cast.ToString(GetOrReturnDefaultValue("DB_PASSWORD", "feruza1727"))
+  config.DB_PASSWORD = cast.ToString(GetOrReturnDefaultValue("DB_PASSWORD", "root"))
   config.DB_NAME = cast.ToString(GetOrReturnDefaultValue("DB_NAME", "olympy"))
 
-  config.KafkaBrokers = parseKafkaBrokers(GetOrReturnDefaultValue("KAFKA_BROKERS", "kafka:9092"))
+  config.KafkaBrokers = parseKafkaBrokers(GetOrReturnDefaultValue("KAFKA_BROKERS", "localhost:9092"))
 
   config.DefaultOffset = cast.ToString(GetOrReturnDefaultValue("DEFAULT_OFFSET", "0"))
   config.DefaultLimit = cast.ToString(GetOrReturnDefaultValue("DEFAULT_LIMIT", "10"))
