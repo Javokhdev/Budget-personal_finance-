@@ -31,8 +31,8 @@ type BudgetStorage interface {
 	GetBudgetById(req *pb.GetBudgetByIdRequest) (*pb.BudgetResponse, error)
 	UpdateBudget(req *pb.UpdateBudgetRequest) (*pb.MessageResponsee, error)
 	DeleteBudget(req *pb.DeleteBudgetRequest) (*pb.BudgetDeleteResponse, error)
-	UpdateBudgetAmount(ctx context.Context, UserId string, amount float32) error
-	CheckBudget(ctx context.Context, userId string) (bool, error)
+	UpdateBudgetAmount(UserId string, amount float32) error
+	CheckBudget(userId string) (bool, error)
 }
 
 type CategoryStorage interface {

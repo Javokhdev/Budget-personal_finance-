@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	pb "budget-service/genproto"
@@ -45,19 +46,20 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, req *pb.Crea
 			return &pb.Response{Message: "Failed to update account balance"}, err
 		}
 
-		err = s.stg.Budget().UpdateBudgetAmount(ctx, req.UserId, req.Amount)
+		err = s.stg.Budget().UpdateBudgetAmount(req.UserId, req.Amount)
 		if err != nil {
 			log.Printf("Failed to update budget amount: %v", err)
 			return &pb.Response{Message: "Failed to update budget amount"}, err
 		}
 
-		check, err := s.stg.Budget().CheckBudget(ctx, req.UserId)
+		check, err := s.stg.Budget().CheckBudget(req.UserId)
 		if err != nil {
 			log.Printf("Failed to check budget: %v", err)
 			return &pb.Response{Message: "Failed to check budget"}, err
 		}
 		if !check {
 			kafkaConn := ConnectToKafka()
+			fmt.Println("Sending Kafka notification")
 			request := model.Send{Message: "Your Budget is depleted", UserId: req.UserId}
 			err = kafka.CreateNotification(kafkaConn, &request)
 			if err != nil {

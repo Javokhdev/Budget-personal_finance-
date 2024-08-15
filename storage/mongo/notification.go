@@ -1,14 +1,15 @@
 package storage
 
 import (
-	ctx "context"
+	"context"
 	"fmt"
 	"log"
 
 	pb "budget-service/genproto"
 	"budget-service/model"
-	"github.com/google/uuid"
+
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -22,24 +23,30 @@ func NewNotificationService(db *mongo.Database) *NotificationService {
 
 func (s *NotificationService) CreateNotification(req model.Send) error {
 	coll := s.db.Collection("notifications")
-	id := uuid.NewString()
-	_, err := coll.InsertOne(ctx.Background(), bson.M{
-		"id":      id,
-		"UserId":  req.UserId,
+	// Generate a new ObjectID for the notification
+	objID := primitive.NewObjectID()
+
+	_, err := coll.InsertOne(context.Background(), bson.M{
+		"_id":     objID, // Use ObjectID for _id
+		"user_id":  req.UserId,
 		"message": req.Message,
 	})
 	if err != nil {
-		log.Printf("Failed to create account: %v", err)
+		log.Printf("Failed to create notification: %v", err)
 		return err
 	}
 	return nil
 }
 
-// GetAccountByid retrieves a notification by user_id
+// GetNotification retrieves a notification by user_id
 func (s *NotificationService) GetNotification(req *pb.GetNotificationByidRequest) (*pb.GetNotificationByidResponse, error) {
 	coll := s.db.Collection("notifications")
-	var notification model.Send
-	err := coll.FindOne(ctx.Background(), bson.M{"user_id": req.UserId}).Decode(&notification)
+	var notificationData struct {
+		ID      primitive.ObjectID `bson:"_id"` // BSON tag for ID field
+		UserId  string             `bson:"user_Id"`
+		Message string             `bson:"message"`
+	}
+	err := coll.FindOne(context.Background(), bson.M{"user_id": req.UserId}).Decode(&notificationData)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("notification not found")
@@ -49,15 +56,15 @@ func (s *NotificationService) GetNotification(req *pb.GetNotificationByidRequest
 	}
 
 	return &pb.GetNotificationByidResponse{
-		UserId:  notification.UserId,
-		Message: notification.Message,
+		UserId:  notificationData.UserId,
+		Message: notificationData.Message,
 	}, nil
 }
 
-// DeleteAccount deletes a notification by user_id
+// DeleteNotification deletes a notification by user_id
 func (s *NotificationService) DeleteNotification(req *pb.GetNotificationByidRequest) (*pb.NotificationsResponse, error) {
 	coll := s.db.Collection("notifications")
-	res, err := coll.DeleteOne(ctx.Background(), bson.M{"user_id": req.UserId})
+	res, err := coll.DeleteOne(context.Background(), bson.M{"user_Id": req.UserId})
 	if err != nil {
 		log.Printf("Failed to delete notification: %v", err)
 		return &pb.NotificationsResponse{
@@ -79,31 +86,32 @@ func (s *NotificationService) DeleteNotification(req *pb.GetNotificationByidRequ
 	}, nil
 }
 
-// ListAccounts lists all notifications
+// ListNotification lists all notifications
 func (s *NotificationService) ListNotification(req *pb.Void) (*pb.ListNotificationResponse, error) {
 	coll := s.db.Collection("notifications")
-	cursor, err := coll.Find(ctx.Background(), bson.M{})
+	cursor, err := coll.Find(context.Background(), bson.M{})
 	if err != nil {
-		log.Printf("Failed to list notifications: %v", err)
 		return nil, err
 	}
-	defer cursor.Close(ctx.Background())
+	defer cursor.Close(context.Background())
 
 	var notifications []*pb.GetNotificationByidResponse
-	for cursor.Next(ctx.Background()) {
-		var notification model.Send
-		if err := cursor.Decode(&notification); err != nil {
-			log.Printf("Failed to decode notification: %v", err)
+	for cursor.Next(context.Background()) {
+		var notificationData struct {
+			ID      primitive.ObjectID `bson:"_id"`
+			UserId  string             `bson:"user_id"`
+			Message string             `bson:"message"`
+		}
+		if err := cursor.Decode(&notificationData); err != nil {
 			return nil, err
 		}
 		notifications = append(notifications, &pb.GetNotificationByidResponse{
-			UserId:  notification.UserId,
-			Message: notification.Message,
+			UserId:  notificationData.UserId,
+			Message: notificationData.Message,
 		})
 	}
 
 	if err := cursor.Err(); err != nil {
-		log.Printf("Cursor error: %v", err)
 		return nil, err
 	}
 

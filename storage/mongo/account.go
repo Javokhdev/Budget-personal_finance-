@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -43,18 +44,47 @@ func (s *AccountStorage) CreateAccount(req *pb.CreateAccountRequest) (*pb.Create
 
 func (s *AccountStorage) GetAccountById(req *pb.GetAccountByIdRequest) (*pb.AccountResponse, error) {
 	coll := s.db.Collection("accounts")
-	var account pb.AccountResponse
-	err := coll.FindOne(context.Background(), bson.M{"id": req.AccountId}).Decode(&account)
+	objID, err := primitive.ObjectIDFromHex(req.AccountId)
 	if err != nil {
+		return nil, fmt.Errorf("invalid budget ID: %v", err)
+	}
+
+	var accountData struct {
+		ID          primitive.ObjectID `bson:"_id"`
+		UserID      string             `bson:"user_id"`
+		AccountName string             `bson:"account_name"`
+		Type        string             `bson:"type"`
+		Balance     float64            `bson:"balance"`
+		Currency    string             `bson:"currency"`
+	}
+
+	err = coll.FindOne(context.Background(), bson.M{"_id": objID}).Decode(&accountData)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("budget not found")
+		}
 		log.Printf("Failed to get account by ID: %v", err)
 		return nil, err
 	}
 
-	return &account, nil
-}
+	account := &pb.AccountResponse{
+		AccountId:   accountData.ID.Hex(),
+		UserId:      accountData.UserID,
+		AccountName: accountData.AccountName,
+		AccountType: accountData.Type,
+		Balance:     accountData.Balance,
+		Currency:    accountData.Currency,
+	}
 
+	return account, nil
+}
 func (s *AccountStorage) UpdateAccount(req *pb.UpdateAccountRequest) (*pb.CreateAccountRes, error) {
 	coll := s.db.Collection("accounts")
+
+	objID, err := primitive.ObjectIDFromHex(req.AccountId)
+	if err != nil {
+		return &pb.CreateAccountRes{Message: "Invalid account ID"}, err
+	}
 
 	// Prepare the update fields
 	updateFields := bson.M{}
@@ -80,7 +110,7 @@ func (s *AccountStorage) UpdateAccount(req *pb.UpdateAccountRequest) (*pb.Create
 	}
 
 	update := bson.M{"$set": updateFields}
-	result, err := coll.UpdateOne(context.Background(), bson.M{"id": req.AccountId}, update)
+	result, err := coll.UpdateOne(context.Background(), bson.M{"_id": objID}, update)
 	if err != nil {
 		log.Printf("Failed to update account: %v", err)
 		return &pb.CreateAccountRes{
@@ -98,7 +128,14 @@ func (s *AccountStorage) UpdateAccount(req *pb.UpdateAccountRequest) (*pb.Create
 
 func (s *AccountStorage) DeleteAccount(req *pb.DeleteAccountRequest) (*pb.DeleteResponse, error) {
 	coll := s.db.Collection("accounts")
-	_, err := coll.DeleteOne(context.Background(), bson.M{"id": req.AccountId})
+	objID, err := primitive.ObjectIDFromHex(req.AccountId)
+	if err != nil {
+		return &pb.DeleteResponse{
+			Success: false,
+		}, fmt.Errorf("invalid account ID: %v", err)
+	}
+
+	_, err = coll.DeleteOne(context.Background(), bson.M{"_id": objID})
 	if err != nil {
 		log.Printf("Failed to delete account: %v", err)
 		return &pb.DeleteResponse{
@@ -116,18 +153,7 @@ func (s *AccountStorage) ListAccounts(req *pb.ListAccountsRequest) (*pb.ListAcco
 	if req.UserId != "" {
 		filter["user_id"] = req.UserId
 	}
-	if req.AccountId != "" {
-		filter["id"] = req.AccountId
-	}
-	if req.AccountType != "" {
-		filter["type"] = req.AccountType
-	}
-	if req.Currency != "" {
-		filter["currency"] = req.Currency
-	}
-	if req.AccountName != "" {
-		filter["account_name"] = req.AccountName
-	}
+	// ... other filter conditions ...
 
 	cursor, err := coll.Find(context.Background(), filter)
 	if err != nil {
@@ -138,12 +164,30 @@ func (s *AccountStorage) ListAccounts(req *pb.ListAccountsRequest) (*pb.ListAcco
 
 	var accounts []*pb.AccountResponse
 	for cursor.Next(context.Background()) {
-		var account pb.AccountResponse
-		if err := cursor.Decode(&account); err != nil {
+		// Use a temporary struct for decoding
+		var accountData struct {
+			ID          primitive.ObjectID `bson:"_id"` // BSON tag for ID field
+			UserID      string             `bson:"user_id"`
+			AccountName string             `bson:"account_name"`
+			Type        string             `bson:"type"`
+			Balance     float64            `bson:"balance"`
+			Currency    string             `bson:"currency"`
+		}
+		if err := cursor.Decode(&accountData); err != nil {
 			log.Printf("Failed to decode account: %v", err)
 			return nil, err
 		}
-		accounts = append(accounts, &account)
+
+		// Convert temporary struct data to Protobuf message
+		account := &pb.AccountResponse{
+			AccountId:   accountData.ID.Hex(),
+			UserId:      accountData.UserID,
+			AccountName: accountData.AccountName,
+			AccountType: accountData.Type,
+			Balance:     accountData.Balance,
+			Currency:    accountData.Currency,
+		}
+		accounts = append(accounts, account)
 	}
 
 	if err := cursor.Err(); err != nil {
@@ -153,7 +197,6 @@ func (s *AccountStorage) ListAccounts(req *pb.ListAccountsRequest) (*pb.ListAcco
 
 	return &pb.ListAccountsResponse{Accounts: accounts}, nil
 }
-
 func (s *AccountStorage) UpdateBalance(ctx context.Context, accountID string, amount float32) error {
 	coll := s.db.Collection("accounts")
 

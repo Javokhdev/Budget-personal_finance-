@@ -6,8 +6,8 @@ import (
 	postgres "budget-service/storage/mongo"
 	"log"
 	"net"
-	// "budget-service/kafka"
-	// kaf "budget-service/notificationKafka"
+	"budget-service/kafka"
+	kaf "budget-service/notificationKafka"
 	"google.golang.org/grpc"
 )
 
@@ -16,16 +16,16 @@ func main() {
 	if err != nil {
 		log.Fatal("Error while connection on db: ", err.Error())
 	}
-	// kcm := kafka.NewKafkaConsumerManager()
-	// appService := service.NewNotificationService(db)
-	// brokers := []string{"localhost:9092"}
-	// if err := kcm.RegisterConsumer(brokers, "create", "root", kaf.StartLevel(appService)); err != nil {
-	// 	if err == kafka.ErrConsumerAlreadyExists {
-	// 		log.Printf("Consumer for topic 'create-job_application' already exists")
-	// 	} else {
-	// 		log.Fatalf("Error registering consumer: %v", err)
-	// 	}
-	// }
+	kcm := kafka.NewKafkaConsumerManager()
+	appService := service.NewNotificationService(db)
+	brokers := []string{"localhost:9092"}
+	if err := kcm.RegisterConsumer(brokers, "create", "root", kaf.StartLevel(appService)); err != nil {
+		if err == kafka.ErrConsumerAlreadyExists {
+			log.Printf("Consumer for topic 'notification' already exists")
+		} else {
+			log.Fatalf("Error registering consumer: %v", err)
+		}
+	}
 
 	liss, err := net.Listen("tcp", ":8088")
 	if err != nil {
